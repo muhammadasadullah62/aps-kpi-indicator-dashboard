@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APS Khanewal | Teacher KPI Dashboard</title>
+    <title>APSACS Khanewal | Teacher KPI Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -26,7 +26,7 @@
                     <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"></path></svg>
                 </div>
                 <div>
-                    <h1 class="text-2xl font-extrabold tracking-tighter aps-green leading-none">APS</h1>
+                    <h1 class="text-2xl font-extrabold tracking-tighter aps-green leading-none">APSACS</h1>
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Khanewal</p>
                 </div>
             </div>
@@ -45,11 +45,6 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     Qualitative Observations
                 </a>
-                <a href="#" class="flex items-center gap-4 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl font-semibold transition-all">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    Attendance Data
-                </a>
-            </nav>
         </div>
     </aside>
 
@@ -230,25 +225,37 @@
                         <div class="space-y-2">
                             <div class="flex justify-between items-center text-xs font-bold"><span class="text-slate-600">Student-Centricity</span><span class="text-aps-green">0.20</span></div>
                             <div class="flex-1 grid grid-cols-4 gap-1 h-3">
-                                <div class="bg-aps-green rounded-l-full"></div><div class="bg-aps-green"></div><div class="bg-aps-green"></div><div class="bg-aps-green rounded-r-full"></div>
+                                <div class="bg-rose-500 rounded-l-full"></div>
+                                <div class="bg-amber-400"></div>
+                                <div class="bg-emerald-500"></div>
+                                <div class="bg-aps-green rounded-r-full"></div>
                             </div>
                         </div>
                         <div class="space-y-2">
                             <div class="flex justify-between items-center text-xs font-bold"><span class="text-slate-600">Classroom Culture</span><span class="text-aps-green">0.20</span></div>
                             <div class="flex-1 grid grid-cols-4 gap-1 h-3">
-                                <div class="bg-aps-green rounded-l-full"></div><div class="bg-aps-green"></div><div class="bg-aps-green"></div><div class="bg-slate-200 rounded-r-full"></div>
+                                <div class="bg-rose-500 rounded-l-full"></div>
+                                <div class="bg-amber-400"></div>
+                                <div class="bg-emerald-500 rounded-r-full"></div>
+                                <div class="bg-slate-200"></div>
                             </div>
                         </div>
                         <div class="space-y-2">
                             <div class="flex justify-between items-center text-xs font-bold"><span class="text-slate-600">Professional Ethics</span><span class="text-aps-green">0.15</span></div>
                             <div class="flex-1 grid grid-cols-4 gap-1 h-3">
-                                <div class="bg-aps-green rounded-l-full"></div><div class="bg-aps-green"></div><div class="bg-slate-200"></div><div class="bg-slate-200 rounded-r-full"></div>
+                                <div class="bg-rose-500 rounded-l-full"></div>
+                                <div class="bg-amber-400 rounded-r-full"></div>
+                                <div class="bg-slate-200"></div>
+                                <div class="bg-slate-200"></div>
                             </div>
                         </div>
                         <div class="space-y-2">
                             <div class="flex justify-between items-center text-xs font-bold"><span class="text-slate-600">Innovation</span><span class="text-aps-green">0.15</span></div>
                             <div class="flex-1 grid grid-cols-4 gap-1 h-3">
-                                <div class="bg-aps-green rounded-l-full"></div><div class="bg-aps-green"></div><div class="bg-slate-200"></div><div class="bg-slate-200 rounded-r-full"></div>
+                                <div class="bg-rose-500 rounded-l-full"></div>
+                                <div class="bg-amber-400 rounded-r-full"></div>
+                                <div class="bg-slate-200"></div>
+                                <div class="bg-slate-200"></div>
                             </div>
                         </div>
                     </div>

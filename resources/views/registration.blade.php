@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APS Khanewal | Portal Login</title>
+    <title>APSACS Khanewal | Portal Login</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -20,7 +20,7 @@
             <div class="w-16 h-16 bg-aps-green rounded-2xl flex items-center justify-center text-white shadow-xl mb-4">
                 <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"></path></svg>
             </div>
-            <h1 class="text-3xl font-black aps-green tracking-tighter uppercase">APS KHANEWAL</h1>
+            <h1 class="text-3xl font-black aps-green tracking-tighter uppercase">APSACS Khanewal </h1>
             <p class="text-slate-500 font-bold text-xs uppercase tracking-[0.2em] mt-1">Teacher KPI Portal</p>
         </div>
 

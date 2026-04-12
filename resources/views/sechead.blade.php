@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APS Khanewal | Section Heads Management</title>
+    <title>APSACS Khanewal | Section Heads Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -28,7 +28,7 @@
                     <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"></path></svg>
                 </div>
                 <div>
-                    <h1 class="text-2xl font-extrabold tracking-tighter aps-green leading-none">APS</h1>
+                    <h1 class="text-2xl font-extrabold tracking-tighter aps-green leading-none">APSACS</h1>
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Khanewal</p>
                 </div>
             </div>

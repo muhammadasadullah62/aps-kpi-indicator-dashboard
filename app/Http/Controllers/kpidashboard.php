@@ -45,11 +45,11 @@ class kpidashboard extends Controller
     {
         return view('teachermanagement');
     }
-    public function observation()
+    public function observations()
     {
-        return view('observation');
+        return view('observations');
     }
-    
+   
   
 
 

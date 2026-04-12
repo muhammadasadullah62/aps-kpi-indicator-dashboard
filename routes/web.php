@@ -11,4 +11,4 @@ Route::get('/registration', [App\Http\Controllers\kpidashboard::class, 'registra
 Route::get('/systemsettings', [App\Http\Controllers\kpidashboard::class, 'systemsetthings'])->name('systemsettings');
 Route::get('/sechead', [App\Http\Controllers\kpidashboard::class, 'sechead'])->name('sechead');
 Route::get('/teachermanagement', [App\Http\Controllers\kpidashboard::class, 'teachermanagement'])->name('teachermanagement');
-Route::get('/observation', [App\Http\Controllers\kpidashboard::class, 'observation'])->name('observation');
+Route::get('/observations', [App\Http\Controllers\kpidashboard::class, 'observations'])->name('observation');
