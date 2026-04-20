@@ -1,0 +1,569 @@
+<?php
+
+namespace App\Support;
+
+use App\Enums\UserRole;
+use App\Models\Observation;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+
+final class ObservationAnalytics
+{
+    public const QUANT_METRICS = ['Student Achievement', 'Student Progress', 'Lesson Planning', 'Assessment Quality', 'Attendance'];
+
+    public const QUAL_METRICS = ['Student-Centricity', 'Professional Ethics', 'Classroom Culture', 'Communication', 'Collaboration', 'Innovation'];
+
+    public const QUAL_KPI_METRICS = [
+        'Student-Centricity',
+        'Professional Ethics',
+        'Classroom Culture',
+        'Communication',
+        'Innovation',
+    ];
+
+    public static function summariesByObservee(?int $observerOnly = null): Collection
+    {
+        $query = Observation::query()
+            ->whereNotNull('aggregate_percent');
+
+        if ($observerOnly !== null) {
+            $query->where('observer_id', $observerOnly);
+        }
+
+        return $query
+            ->groupBy('observee_id')
+            ->selectRaw('observee_id, ROUND(AVG(aggregate_percent), 2) as avg_score, COUNT(*) as observation_count')
+            ->get()
+            ->keyBy('observee_id');
+    }
+
+    public static function rankedUsers(?callable $scopeUsers = null, ?int $observerOnly = null): Collection
+    {
+        $summaries = self::summariesByObservee($observerOnly);
+        if ($summaries->isEmpty()) {
+            return collect();
+        }
+
+        $query = User::query()
+            ->whereIn('id', $summaries->keys()->all())
+            ->with('avatarMedia');
+
+        if ($scopeUsers !== null) {
+            $scopeUsers($query);
+        }
+
+        $users = $query->get()->keyBy('id');
+
+        $rows = $summaries
+            ->map(function ($row) use ($users) {
+                $user = $users->get((int) $row->observee_id);
+                if ($user === null) {
+                    return null;
+                }
+
+                return [
+                    'user' => $user,
+                    'avg_score' => (float) $row->avg_score,
+                    'observation_count' => (int) $row->observation_count,
+                ];
+            })
+            ->filter()
+            ->sortByDesc(fn (array $r) => $r['avg_score'])
+            ->values();
+
+        return $rows->values()->map(function (array $row, int $idx) {
+            $row['rank'] = $idx + 1;
+
+            return $row;
+        });
+    }
+
+    public static function rankedSectionHeads(?int $observerOnly = null): Collection
+    {
+        return self::rankedUsers(
+            fn (Builder $q) => $q->where('role', UserRole::SectionHead),
+            $observerOnly
+        );
+    }
+
+    public static function rankedFaculty(?int $observerOnly = null): Collection
+    {
+        return self::rankedUsers(
+            fn (Builder $q) => $q->where('role', UserRole::Faculty),
+            $observerOnly
+        );
+    }
+
+    public static function rankedStaffCombined(?int $observerOnly = null): Collection
+    {
+        return self::rankedUsers(
+            fn (Builder $q) => $q->whereIn('role', [UserRole::SectionHead, UserRole::Faculty]),
+            $observerOnly
+        );
+    }
+
+    public static function rankedFacultyInWing(?\App\Enums\Wing $wing, ?int $observerOnly = null): Collection
+    {
+        return self::rankedUsers(function (Builder $q) use ($wing) {
+            $q->where('role', UserRole::Faculty);
+            if ($wing === null) {
+                $q->whereNull('wing');
+            } else {
+                $q->where('wing', $wing);
+            }
+        }, $observerOnly);
+    }
+
+    private static function numericMetricFromRubricBlock(array $block, string $canonicalName): ?float
+    {
+        if (isset($block[$canonicalName]) && is_numeric($block[$canonicalName])) {
+            return (float) $block[$canonicalName];
+        }
+
+        $want = mb_strtolower(preg_replace('/\s+/u', ' ', trim($canonicalName)));
+
+        foreach ($block as $rawKey => $val) {
+            if (! is_numeric($val)) {
+                continue;
+            }
+            $key = is_string($rawKey) || is_int($rawKey) ? (string) $rawKey : '';
+            $got = mb_strtolower(preg_replace('/\s+/u', ' ', trim($key)));
+            if ($got === $want || $got === mb_strtolower($canonicalName)) {
+                return (float) $val;
+            }
+        }
+
+        return null;
+    }
+
+    private static function quantitativeBlockFromSession(array $session): array
+    {
+        foreach (['quantitative', 'Quantitative'] as $k) {
+            if (isset($session[$k]) && is_array($session[$k])) {
+                return $session[$k];
+            }
+        }
+
+        return [];
+    }
+
+    private static function qualitativeBlockFromSession(array $session): array
+    {
+        foreach (['qualitative', 'Qualitative'] as $k) {
+            if (isset($session[$k]) && is_array($session[$k])) {
+                return $session[$k];
+            }
+        }
+
+        return [];
+    }
+
+    public static function averagedSessionMetrics(iterable $observations): array
+    {
+        $quantSums = [];
+        $quantN = [];
+        $qualSums = [];
+        $qualN = [];
+
+        foreach ($observations as $observation) {
+            if (! $observation instanceof Observation) {
+                continue;
+            }
+            foreach ($observation->sessions_payload ?? [] as $session) {
+                if (! is_array($session)) {
+                    continue;
+                }
+                $qBlock = self::quantitativeBlockFromSession($session);
+                $lBlock = self::qualitativeBlockFromSession($session);
+
+                foreach (self::QUANT_METRICS as $metricName) {
+                    $v = self::numericMetricFromRubricBlock($qBlock, $metricName);
+                    if ($v !== null) {
+                        $quantSums[$metricName] = ($quantSums[$metricName] ?? 0) + $v;
+                        $quantN[$metricName] = ($quantN[$metricName] ?? 0) + 1;
+                    }
+                }
+                foreach (self::QUAL_METRICS as $metricName) {
+                    $v = self::numericMetricFromRubricBlock($lBlock, $metricName);
+                    if ($v !== null) {
+                        $qualSums[$metricName] = ($qualSums[$metricName] ?? 0) + $v;
+                        $qualN[$metricName] = ($qualN[$metricName] ?? 0) + 1;
+                    }
+                }
+            }
+        }
+
+        $quantitative = [];
+        foreach (self::QUANT_METRICS as $metricName) {
+            $n = (int) ($quantN[$metricName] ?? 0);
+            if ($n < 1) {
+                continue;
+            }
+            $sum = $quantSums[$metricName] ?? 0.0;
+            $quantitative[$metricName] = round($sum / $n, 2);
+        }
+
+        $qualitative = [];
+        foreach (self::QUAL_METRICS as $metricName) {
+            $n = (int) ($qualN[$metricName] ?? 0);
+            if ($n < 1) {
+                continue;
+            }
+            $sum = $qualSums[$metricName] ?? 0.0;
+            $qualitative[$metricName] = round($sum / $n, 2);
+        }
+
+        return ['quantitative' => $quantitative, 'qualitative' => $qualitative];
+    }
+
+    public static function totalSessionsInObservations(iterable $observations): int
+    {
+        $total = 0;
+        foreach ($observations as $observation) {
+            if (! $observation instanceof Observation) {
+                continue;
+            }
+            $sessions = $observation->sessions_payload ?? [];
+            if (! is_array($sessions)) {
+                continue;
+            }
+            $total += count($sessions);
+        }
+
+        return $total;
+    }
+
+    public static function averageAggregatePercent(iterable $observations): ?float
+    {
+        $sum = 0.0;
+        $n = 0;
+        foreach ($observations as $observation) {
+            if (! $observation instanceof Observation) {
+                continue;
+            }
+            if ($observation->aggregate_percent === null) {
+                continue;
+            }
+            $sum += (float) $observation->aggregate_percent;
+            $n++;
+        }
+
+        if ($n < 1) {
+            return null;
+        }
+
+        return round($sum / $n, 1);
+    }
+
+    public static function kpiQuantitativeCardsFromObservations(iterable $observations): array
+    {
+        $collection = self::sortedObservationCollection($observations);
+        $quant = self::averagedSessionMetrics($collection)['quantitative'];
+
+        $ratingToPct = function (?float $avgRating): ?float {
+            if ($avgRating === null) {
+                return null;
+            }
+
+            return round(($avgRating / 5) * 100, 1);
+        };
+
+        $cards = [];
+        foreach (self::QUANT_METRICS as $name) {
+            $cards[] = [
+                'category' => 'quantitative',
+                'category_label' => 'Quantitative',
+                'metric_name' => $name,
+                'display' => self::formatPct($ratingToPct($quant[$name] ?? null)),
+                ...self::sparkPathsForCard(self::sparklineMetricPaths($collection, 'quantitative', $name)),
+            ];
+        }
+
+        return $cards;
+    }
+
+    public static function kpiQualitativeCardsFromObservations(iterable $observations): array
+    {
+        $collection = self::sortedObservationCollection($observations);
+        $qual = self::averagedSessionMetrics($collection)['qualitative'];
+
+        $ratingToPct = function (?float $avgRating): ?float {
+            if ($avgRating === null) {
+                return null;
+            }
+
+            return round(($avgRating / 5) * 100, 1);
+        };
+
+        $cards = [];
+        foreach (self::QUAL_KPI_METRICS as $name) {
+            $cards[] = [
+                'category' => 'qualitative',
+                'category_label' => 'Qualitative',
+                'metric_name' => $name,
+                'display' => self::formatPct($ratingToPct($qual[$name] ?? null)),
+                ...self::sparkPathsForCard(self::sparklineMetricPaths($collection, 'qualitative', $name)),
+            ];
+        }
+
+        return $cards;
+    }
+
+    public static function kpiCardsFromObservations(iterable $observations): array
+    {
+        $collection = self::sortedObservationCollection($observations);
+        $metrics = self::averagedSessionMetrics($collection);
+        $quant = $metrics['quantitative'];
+        $qual = $metrics['qualitative'];
+
+        $overallAvg = $collection->filter(fn (Observation $o) => $o->aggregate_percent !== null)->avg('aggregate_percent');
+        $overallPct = $overallAvg !== null ? round((float) $overallAvg, 1) : null;
+
+        $ratingToPct = function (?float $avgRating): ?float {
+            if ($avgRating === null) {
+                return null;
+            }
+
+            return round(($avgRating / 5) * 100, 1);
+        };
+
+        $pickQ = fn (string $name) => $ratingToPct($quant[$name] ?? null);
+        $pickL = fn (string $name) => $ratingToPct($qual[$name] ?? null);
+
+        return [
+            [
+                'category' => 'overall',
+                'category_label' => 'Summary',
+                'metric_name' => 'Overall observation score',
+                'display' => $overallPct !== null ? $overallPct.'%' : '—',
+                ...self::sparkPathsForCard(self::sparklineAggregatePaths($collection)),
+            ],
+            [
+                'category' => 'quantitative',
+                'category_label' => 'Quantitative',
+                'metric_name' => 'Student Achievement',
+                'display' => self::formatPct($pickQ('Student Achievement')),
+                ...self::sparkPathsForCard(self::sparklineMetricPaths($collection, 'quantitative', 'Student Achievement')),
+            ],
+            [
+                'category' => 'quantitative',
+                'category_label' => 'Quantitative',
+                'metric_name' => 'Lesson Planning',
+                'display' => self::formatPct($pickQ('Lesson Planning')),
+                ...self::sparkPathsForCard(self::sparklineMetricPaths($collection, 'quantitative', 'Lesson Planning')),
+            ],
+            [
+                'category' => 'qualitative',
+                'category_label' => 'Qualitative',
+                'metric_name' => 'Student-Centricity',
+                'display' => self::formatPct($pickL('Student-Centricity')),
+                ...self::sparkPathsForCard(self::sparklineMetricPaths($collection, 'qualitative', 'Student-Centricity')),
+            ],
+            [
+                'category' => 'quantitative',
+                'category_label' => 'Quantitative',
+                'metric_name' => 'Attendance',
+                'display' => self::formatPct($pickQ('Attendance')),
+                ...self::sparkPathsForCard(self::sparklineMetricPaths($collection, 'quantitative', 'Attendance')),
+            ],
+            [
+                'category' => 'quantitative',
+                'category_label' => 'Quantitative',
+                'metric_name' => 'Assessment Quality',
+                'display' => self::formatPct($pickQ('Assessment Quality')),
+                ...self::sparkPathsForCard(self::sparklineMetricPaths($collection, 'quantitative', 'Assessment Quality')),
+            ],
+            [
+                'category' => 'quantitative',
+                'category_label' => 'Quantitative',
+                'metric_name' => 'Student Progress',
+                'display' => self::formatPct($pickQ('Student Progress')),
+                ...self::sparkPathsForCard(self::sparklineMetricPaths($collection, 'quantitative', 'Student Progress')),
+            ],
+            [
+                'category' => 'qualitative',
+                'category_label' => 'Qualitative',
+                'metric_name' => 'Innovation',
+                'display' => self::formatPct($pickL('Innovation')),
+                ...self::sparkPathsForCard(self::sparklineMetricPaths($collection, 'qualitative', 'Innovation')),
+            ],
+        ];
+    }
+
+    private static function sortedObservationCollection(iterable $observations): Collection
+    {
+        return Collection::wrap($observations)
+            ->filter(fn ($o) => $o instanceof Observation)
+            ->sortBy(fn (Observation $o) => $o->created_at?->timestamp ?? 0)
+            ->values();
+    }
+
+    private static function formatPct(?float $pct): string
+    {
+        return $pct !== null ? $pct.'%' : '—';
+    }
+
+    private static function sparkPathsForCard(?array $paths): array
+    {
+        if ($paths === null) {
+            return ['spark_line_path' => null, 'spark_area_path' => null, 'trend' => 'flat'];
+        }
+
+        return [
+            'spark_line_path' => $paths['line'],
+            'spark_area_path' => $paths['area'],
+            'trend' => $paths['trend'],
+        ];
+    }
+
+    private static function sparklineAggregatePaths(Collection $observations): ?array
+    {
+        $series = $observations
+            ->filter(fn (Observation $o) => $o->aggregate_percent !== null)
+            ->map(fn (Observation $o) => (float) $o->aggregate_percent)
+            ->values()
+            ->all();
+
+        return self::smoothWavePathsFromSeries($series);
+    }
+
+    private static function sparklineMetricPaths(Collection $observations, string $bucket, string $metric): ?array
+    {
+        $series = [];
+        foreach ($observations as $observation) {
+            $avg = self::averageMetricPerObservationSessions($observation, $bucket, $metric);
+            if ($avg !== null) {
+                $series[] = ($avg / 5) * 100;
+            }
+        }
+
+        return self::smoothWavePathsFromSeries($series);
+    }
+
+    private static function averageMetricPerObservationSessions(Observation $observation, string $bucket, string $metric): ?float
+    {
+        $sum = 0.0;
+        $n = 0;
+        foreach ($observation->sessions_payload ?? [] as $session) {
+            if (! is_array($session)) {
+                continue;
+            }
+            $block = $bucket === 'quantitative'
+                ? self::quantitativeBlockFromSession($session)
+                : self::qualitativeBlockFromSession($session);
+            $val = self::numericMetricFromRubricBlock($block, $metric);
+            if ($val !== null) {
+                $sum += $val;
+                $n++;
+            }
+        }
+
+        return $n > 0 ? $sum / $n : null;
+    }
+
+    private static function smoothWavePathsFromSeries(array $series): ?array
+    {
+        $series = array_values(array_filter($series, fn ($v) => is_numeric($v)));
+        if (count($series) < 2) {
+            return null;
+        }
+
+        $first = (float) $series[0];
+        $last = (float) $series[count($series) - 1];
+        $trend = match (true) {
+            $last > $first => 'up',
+            $last < $first => 'down',
+            default => 'flat',
+        };
+
+        $min = min($series);
+        $max = max($series);
+        $rawRange = max(0.001, $max - $min);
+
+        $midVal = ($min + $max) / 2;
+        $range = max($rawRange, 14.0);
+        $min = max(0.0, $midVal - $range / 2);
+        $max = min(100.0, $midVal + $range / 2);
+        if ($max <= $min) {
+            $max = min(100.0, $min + 0.001);
+        }
+        $range = max(0.001, $max - $min);
+
+        $padX = 4.0;
+        $padY = 5.0;
+        $plotW = 92.0;
+        $plotH = 18.0;
+        $bottomY = $padY + $plotH + 3.0;
+
+        $n = count($series);
+        $pts = [];
+        foreach ($series as $i => $v) {
+            $x = $padX + ($n <= 1 ? $plotW / 2 : ($i / ($n - 1)) * $plotW);
+            $norm = ($v - $min) / $range;
+
+            $centred = ($norm - 0.5) * 1.22 + 0.5;
+            $norm = max(0.0, min(1.0, $centred));
+            $y = $padY + $plotH - $norm * $plotH;
+            $pts[] = [$x, $y];
+        }
+
+        $linePath = count($pts) === 2
+            ? self::quadraticWaveBetween($pts[0], $pts[1])
+            : self::catmullRomBezierOpenPath($pts);
+
+        $firstX = round($pts[0][0], 3);
+        $lastX = round($pts[$n - 1][0], 3);
+        $areaPath = $linePath.' L '.$lastX.' '.$bottomY.' L '.$firstX.' '.$bottomY.' Z';
+
+        return ['line' => $linePath, 'area' => $areaPath, 'trend' => $trend];
+    }
+
+    private static function quadraticWaveBetween(array $p0, array $p1): string
+    {
+        $mx = ($p0[0] + $p1[0]) / 2;
+        $my = ($p0[1] + $p1[1]) / 2;
+        $dx = abs($p1[0] - $p0[0]);
+        $dy = abs($p1[1] - $p0[1]);
+
+        $bulge = min(9.5, max(4.0, $dx * 0.22 + $dy * 0.55));
+        $cy = $my - $bulge;
+
+        return 'M '.round($p0[0], 3).' '.round($p0[1], 3)
+            .' Q '.round($mx, 3).' '.round($cy, 3).' '.round($p1[0], 3).' '.round($p1[1], 3);
+    }
+
+    private static function catmullRomBezierOpenPath(array $pts): string
+    {
+        $n = count($pts);
+        if ($n < 2) {
+            return '';
+        }
+        if ($n === 2) {
+            return self::quadraticWaveBetween($pts[0], $pts[1]);
+        }
+
+        $d = '';
+        for ($i = 0; $i < $n - 1; $i++) {
+            $p0 = $pts[max(0, $i - 1)];
+            $p1 = $pts[$i];
+            $p2 = $pts[$i + 1];
+            $p3 = $pts[min($n - 1, $i + 2)];
+
+            $tension = 4;
+            $cp1x = $p1[0] + ($p2[0] - $p0[0]) / $tension;
+            $cp1y = $p1[1] + ($p2[1] - $p0[1]) / $tension;
+            $cp2x = $p2[0] - ($p3[0] - $p1[0]) / $tension;
+            $cp2y = $p2[1] - ($p3[1] - $p1[1]) / $tension;
+
+            if ($i === 0) {
+                $d = 'M '.round($p1[0], 3).' '.round($p1[1], 3)
+                    .' C '.round($cp1x, 3).' '.round($cp1y, 3).', '.round($cp2x, 3).' '.round($cp2y, 3).', '.round($p2[0], 3).' '.round($p2[1], 3);
+            } else {
+                $d .= ' C '.round($cp1x, 3).' '.round($cp1y, 3).', '.round($cp2x, 3).' '.round($cp2y, 3).', '.round($p2[0], 3).' '.round($p2[1], 3);
+            }
+        }
+
+        return $d;
+    }
+}
