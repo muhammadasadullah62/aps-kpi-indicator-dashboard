@@ -21,15 +21,26 @@
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div><label class="text-[10px] font-black text-slate-400 uppercase mb-2 block">Full name <span class="text-red-500">*</span></label><input type="text" name="name" value="{{ old('name') }}" required class="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:border-aps-green"></div>
-                <div>
-                    <label class="text-[10px] font-black text-slate-400 uppercase mb-2 block">Department <span class="text-red-500">*</span></label>
-                    <select name="department" required class="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold outline-none appearance-none">
-                        <option value="">Select department</option>
-                        @foreach (Department::cases() as $d)
-                            <option value="{{ $d->value }}" @selected(old('department') === $d->value)>{{ $d->label() }}</option>
-                        @endforeach
-                    </select>
+            </div>
+            <div>
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">Departments <span class="text-red-500">*</span></label>
+                <p class="text-xs text-slate-500 font-semibold mb-4">Select all departments this teacher is associated with.</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-56 overflow-y-auto pr-2">
+                    @foreach (Department::cases() as $dept)
+                        <label class="flex items-center gap-3 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/80 cursor-pointer hover:border-aps-green/40 transition-colors has-[:checked]:border-aps-green has-[:checked]:bg-emerald-50/50">
+                            <input type="checkbox" name="departments[]" value="{{ $dept->value }}" class="rounded border-slate-300 text-aps-green focus:ring-aps-green create-fa-dept-cb" {{ in_array($dept->value, old('departments', []), true) ? 'checked' : '' }}>
+                            <span class="text-sm font-semibold text-slate-800">{{ $dept->label() }}</span>
+                        </label>
+                    @endforeach
                 </div>
+            </div>
+            <div id="createFacultyOtherDeptWrap" class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-6 space-y-3 {{ in_array(Department::Other->value, old('departments', []), true) ? '' : 'hidden' }}">
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Custom department name <span class="text-red-500">*</span></label>
+                <p class="text-xs text-slate-500 font-semibold">Shown when &ldquo;Other&rdquo; is selected. Must be unique (similar names are rejected).</p>
+                <input type="text" name="other_department_label" id="create_faculty_other_department_label" value="{{ old('other_department_label') }}" maxlength="120" autocomplete="off" placeholder="e.g. Robotics Lab, STEAM Studio" class="w-full px-5 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:border-aps-green">
+                @error('other_department_label')
+                    <p class="text-sm font-semibold text-red-600">{{ $message }}</p>
+                @enderror
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
                 @if(auth()->user()->isAdmin() || auth()->user()->isPrincipal())
@@ -77,16 +88,28 @@
             <button type="button" onclick="toggleModal('viewFacultyModal')" class="text-slate-400 hover:text-slate-600"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
         </div>
         <div class="p-12 space-y-10">
-            <div class="flex items-center gap-10">
-                <div class="relative w-32 h-32 shrink-0">
+            <div class="flex flex-col sm:flex-row sm:items-start gap-10">
+                <div class="relative w-32 h-32 shrink-0 mx-auto sm:mx-0">
                     <img id="viewFaAvatar" src="" alt="" class="hidden w-32 h-32 rounded-[2.5rem] object-cover shadow-xl border border-slate-100">
                     <div id="viewFaInitials" class="w-32 h-32 bg-emerald-500 rounded-[2.5rem] flex items-center justify-center text-white text-5xl font-black shadow-xl">?</div>
                 </div>
-                <div class="grid grid-cols-2 gap-x-12 gap-y-6 flex-1">
-                    <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Name</p><p id="viewFaName" class="text-lg font-black text-slate-800 mt-1"></p></div>
-                    <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee ID</p><p id="viewFaEmp" class="text-lg font-black text-slate-800 mt-1"></p></div>
-                    <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Institutional Email</p><p id="viewFaEmail" class="text-lg font-black text-aps-green mt-1"></p></div>
-                    <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Department &amp; wing</p><p id="viewFaDept" class="text-lg font-black text-slate-800 mt-1"></p></div>
+                <div class="grid w-full min-w-0 sm:flex-1 grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-5">
+                    <div class="min-w-0 sm:pr-1">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Name</p>
+                        <p id="viewFaName" class="text-base sm:text-lg font-black text-slate-800 mt-1 break-words [overflow-wrap:anywhere]"></p>
+                    </div>
+                    <div class="min-w-0 sm:pl-1">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee ID</p>
+                        <p id="viewFaEmp" class="text-base sm:text-lg font-black text-slate-800 mt-1 break-words [overflow-wrap:anywhere]"></p>
+                    </div>
+                    <div class="min-w-0 sm:col-span-2">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Institutional Email</p>
+                        <p id="viewFaEmail" class="text-sm sm:text-base font-bold text-aps-green mt-1 break-words [overflow-wrap:anywhere] leading-relaxed"></p>
+                    </div>
+                    <div class="min-w-0 sm:col-span-2">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Departments &amp; wing</p>
+                        <p id="viewFaDept" class="text-base sm:text-lg font-black text-slate-800 mt-1 break-words [overflow-wrap:anywhere]"></p>
+                    </div>
                 </div>
             </div>
             <div class="mt-8 pt-8 border-t border-slate-100 flex justify-end">
@@ -121,15 +144,26 @@
                     <p class="text-[10px] text-slate-400 font-semibold mt-1">System-assigned; cannot be changed.</p>
                 </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div>
-                    <label class="text-[10px] font-black text-slate-400 uppercase mb-2 block">Department <span class="text-red-500">*</span></label>
-                    <select id="edit_fa_department" name="department" required class="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-black outline-none">
-                        @foreach (Department::cases() as $d)
-                            <option value="{{ $d->value }}">{{ $d->label() }}</option>
-                        @endforeach
-                    </select>
+            <div>
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3 px-1">Departments <span class="text-red-500">*</span></label>
+                <div id="editFacultyDepartmentsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-56 overflow-y-auto pr-2">
+                    @foreach (Department::cases() as $dept)
+                        <label class="flex items-center gap-3 px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/80 cursor-pointer hover:border-aps-green/40 transition-colors has-[:checked]:border-aps-green has-[:checked]:bg-emerald-50/50">
+                            <input type="checkbox" name="departments[]" value="{{ $dept->value }}" class="edit-fa-dept-cb rounded border-slate-300 text-aps-green focus:ring-aps-green">
+                            <span class="text-sm font-semibold text-slate-800">{{ $dept->label() }}</span>
+                        </label>
+                    @endforeach
                 </div>
+            </div>
+            <div id="editFacultyOtherDeptWrap" class="hidden rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-6 space-y-3">
+                <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest block px-1">Custom department name <span class="text-red-500">*</span></label>
+                <p class="text-xs text-slate-500 font-semibold px-1">Required when &ldquo;Other&rdquo; is selected. Must be unique (similar names are rejected).</p>
+                <input type="text" name="other_department_label" id="edit_faculty_other_department_label" maxlength="120" autocomplete="off" placeholder="e.g. Robotics Lab" class="w-full px-5 py-3.5 bg-white border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:border-aps-green">
+                @error('other_department_label')
+                    <p class="text-sm font-semibold text-red-600 px-1">{{ $message }}</p>
+                @enderror
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 @if(auth()->user()->isAdmin() || auth()->user()->isPrincipal())
                 <div>
                     <label class="text-[10px] font-black text-slate-400 uppercase mb-2 block">Assigned wing <span class="text-red-500">*</span></label>

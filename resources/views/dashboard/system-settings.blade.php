@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @php
+    use App\Enums\Department;
     use App\Enums\Wing;
 @endphp
 
@@ -23,7 +24,9 @@
             @if (session('status'))
                 <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900 mb-8">{{ session('status') }}</div>
             @endif
-            @php($u = auth()->user()->loadMissing('avatarMedia'))
+            @php
+                $u = auth()->user()->loadMissing('avatarMedia');
+            @endphp
             <div class="max-w-xl mx-auto bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
                 <div class="p-10 border-b border-slate-100 bg-slate-50/50">
                     <h2 class="text-xl font-black text-slate-800 uppercase tracking-tight">Your account</h2>
@@ -109,7 +112,9 @@
                                         @endif
                                         <div>
                                             <p class="text-sm text-slate-800 leading-none">{{ $row->name }}</p>
-                                            @php($sub = array_values(array_filter([$row->wing?->label(), $row->department?->label()])))
+                                            @php
+                                                $sub = array_values(array_filter([$row->wing?->label(), $row->department?->label()]));
+                                            @endphp
                                             <p class="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">{{ count($sub) ? implode(' • ', $sub) : $row->role->label() }}</p>
                                         </div>
                                     </td>
@@ -156,8 +161,10 @@
                 </div>
 
                 @if(auth()->user()->isSectionHead())
-                    @php($wing = auth()->user()->wing)
-                    @php($members = $wing ? ($facultyByWing[$wing->value] ?? collect()) : collect())
+                    @php
+                        $wing = auth()->user()->wing;
+                        $members = $wing ? ($facultyByWing[$wing->value] ?? collect()) : collect();
+                    @endphp
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col h-[420px] md:col-span-3 max-w-2xl mx-auto w-full">
                             <div class="p-8 border-b border-slate-100 flex items-center justify-between">
@@ -176,7 +183,9 @@
                 @else
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     @foreach (Wing::cases() as $wing)
-                    @php($members = $facultyByWing[$wing->value] ?? collect())
+                    @php
+                        $members = $facultyByWing[$wing->value] ?? collect();
+                    @endphp
                     <div class="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col h-[420px]">
                         <div class="p-8 border-b border-slate-100 flex items-center justify-between">
                             <h4 class="text-lg font-black text-slate-800 uppercase">{{ $wing->label() }}</h4>
@@ -238,6 +247,21 @@ function previewImage(input, previewId, placeholderId) {
     }
 }
 @else
+var FACULTY_OTHER_DEPT = @json(Department::Other->value);
+function syncCreateFacultyOtherDeptWrap() {
+    var wrap = document.getElementById('createFacultyOtherDeptWrap');
+    if (!wrap) return;
+    var cb = document.querySelector('#createFacultyModal input[name="departments[]"][value="' + FACULTY_OTHER_DEPT + '"]');
+    if (cb && cb.checked) wrap.classList.remove('hidden');
+    else wrap.classList.add('hidden');
+}
+function syncEditFacultyOtherDeptWrap() {
+    var wrap = document.getElementById('editFacultyOtherDeptWrap');
+    if (!wrap) return;
+    var cb = document.querySelector('#editFacultyForm input[name="departments[]"][value="' + FACULTY_OTHER_DEPT + '"]');
+    if (cb && cb.checked) wrap.classList.remove('hidden');
+    else wrap.classList.add('hidden');
+}
 function toggleModal(modalId) {
     const modal = document.getElementById(modalId);
     if (!modal) return;

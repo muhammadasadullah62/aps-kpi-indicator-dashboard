@@ -25,7 +25,7 @@
         </button>
         <div
             id="profileDropdown"
-            class="hidden absolute right-0 mt-3 w-64 bg-white border border-slate-200 rounded-[1.5rem] shadow-2xl py-2 z-50 transform origin-top-right transition-all"
+            class="hidden absolute right-0 mt-3 w-64 max-w-[min(18rem,calc(100vw-1.5rem))] bg-white border border-slate-200 rounded-[1.5rem] shadow-2xl py-2 z-50 transform origin-top-right transition-all"
             role="menu"
         >
             <div class="px-6 py-4 border-b border-slate-100">

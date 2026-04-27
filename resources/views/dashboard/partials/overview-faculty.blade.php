@@ -106,5 +106,8 @@
     @include('dashboard.partials.overview-metrics-panels', [
         'metrics' => $observeeMetrics ?? ['quantitative' => [], 'qualitative' => []],
         'aggregatedSessions' => $rubricAggregatedSessions ?? 0,
+        'kpiQuantAveragePercent' => $kpiQuantAveragePercent ?? null,
+        'kpiQualAveragePercent' => $kpiQualAveragePercent ?? null,
     ])
+    @include('dashboard.partials.overview-observation-remarks', ['observationRemarks' => $observationRemarks ?? null])
 </div>

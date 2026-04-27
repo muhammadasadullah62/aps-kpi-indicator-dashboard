@@ -25,7 +25,7 @@ class SectionHeadController extends Controller
 
         $sectionHeadsQuery = User::query()
             ->where('role', UserRole::SectionHead)
-            ->with('avatarMedia')
+            ->with(['avatarMedia', 'assignedDepartments'])
             ->orderBy('name');
 
         if ($user->isSectionHead()) {
@@ -75,9 +75,10 @@ class SectionHeadController extends Controller
             'wing' => $wing,
             'title' => $request->filled('title') ? $request->string('title')->toString() : null,
             'department' => null,
-            'departments' => $departmentValues,
             'other_department_label' => $hasOther ? trim($request->string('other_department_label')->toString()) : null,
         ]);
+
+        $user->syncDepartments($departmentValues);
 
         $this->syncAvatar($user, $request->file('avatar'));
 
@@ -102,7 +103,6 @@ class SectionHeadController extends Controller
             'email' => $request->string('email')->toString(),
             'wing' => $request->enum('wing', Wing::class),
             'title' => $request->filled('title') ? $request->string('title')->toString() : null,
-            'departments' => $departmentValues,
             'other_department_label' => $hasOther ? trim($request->string('other_department_label')->toString()) : null,
         ];
 
@@ -111,6 +111,8 @@ class SectionHeadController extends Controller
         }
 
         $user->update($data);
+
+        $user->syncDepartments($departmentValues);
 
         $this->syncAvatar($user, $request->file('avatar'));
 

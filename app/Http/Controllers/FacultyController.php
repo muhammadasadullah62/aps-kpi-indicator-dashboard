@@ -24,7 +24,7 @@ class FacultyController extends Controller
 
         $query = User::query()
             ->where('role', UserRole::Faculty)
-            ->with('avatarMedia')
+            ->with(['avatarMedia', 'assignedDepartments'])
             ->orderBy('name');
 
         if ($request->user()?->isSectionHead() || $request->user()?->isFaculty()) {
@@ -53,6 +53,15 @@ class FacultyController extends Controller
 
         $employeeId = InstitutionalEmployeeId::next($wing, false);
 
+        $departmentValues = collect($request->input('departments', []))
+            ->map(fn ($v) => is_string($v) ? $v : null)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $hasOther = in_array(Department::Other->value, $departmentValues, true);
+
         $user = User::create([
             'name' => $request->string('name')->toString(),
             'employee_id' => $employeeId,
@@ -60,9 +69,12 @@ class FacultyController extends Controller
             'password' => Hash::make($request->string('password')->toString()),
             'role' => UserRole::Faculty,
             'wing' => $wing,
-            'department' => $request->enum('department', Department::class),
+            'department' => null,
+            'other_department_label' => $hasOther ? trim($request->string('other_department_label')->toString()) : null,
             'title' => $request->filled('title') ? $request->string('title')->toString() : null,
         ]);
+
+        $user->syncDepartments($departmentValues);
 
         $this->syncAvatar($user, $request->file('avatar'));
 
@@ -86,11 +98,21 @@ class FacultyController extends Controller
 
         abort_if($request->user()->isSectionHead() && ! $wing, 403);
 
+        $departmentValues = collect($request->input('departments', []))
+            ->map(fn ($v) => is_string($v) ? $v : null)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $hasOther = in_array(Department::Other->value, $departmentValues, true);
+
         $data = [
             'name' => $request->string('name')->toString(),
             'email' => $request->string('email')->toString(),
             'wing' => $wing,
-            'department' => $request->enum('department', Department::class),
+            'department' => null,
+            'other_department_label' => $hasOther ? trim($request->string('other_department_label')->toString()) : null,
             'title' => $request->filled('title') ? $request->string('title')->toString() : null,
         ];
 
@@ -99,6 +121,8 @@ class FacultyController extends Controller
         }
 
         $user->update($data);
+
+        $user->syncDepartments($departmentValues);
 
         $this->syncAvatar($user, $request->file('avatar'));
 
