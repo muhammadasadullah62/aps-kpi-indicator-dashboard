@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Enums\UserRole;
 use App\Models\Observation;
+use App\Models\ObservationSession;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -47,7 +48,7 @@ final class ObservationAnalytics
 
         $query = User::query()
             ->whereIn('id', $summaries->keys()->all())
-            ->with('avatarMedia');
+            ->with(['avatarMedia', 'assignedDepartments']);
 
         if ($scopeUsers !== null) {
             $scopeUsers($query);
@@ -137,6 +138,24 @@ final class ObservationAnalytics
         return null;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function sessionsIterable(Observation $observation): array
+    {
+        if (! $observation->relationLoaded('observationSessions')) {
+            $observation->load('observationSessions.scores');
+        } else {
+            $observation->loadMissing('observationSessions.scores');
+        }
+
+        return $observation->observationSessions
+            ->sortBy('sort_order')
+            ->values()
+            ->map(fn (ObservationSession $s) => $s->toRubricSessionArray())
+            ->all();
+    }
+
     private static function quantitativeBlockFromSession(array $session): array
     {
         foreach (['quantitative', 'Quantitative'] as $k) {
@@ -159,6 +178,110 @@ final class ObservationAnalytics
         return [];
     }
 
+    /**
+     * True when the session has a numeric 1–5 value for every quantitative and qualitative rubric name.
+     *
+     * @param  array<string, mixed>  $session
+     */
+    public static function rubricSessionArrayIsComplete(array $session): bool
+    {
+        if (! is_array($session)) {
+            return false;
+        }
+        $q = self::quantitativeBlockFromSession($session);
+        $l = self::qualitativeBlockFromSession($session);
+
+        return self::rubricBlockHasAllValidRatings($q, self::QUANT_METRICS)
+            && self::rubricBlockHasAllValidRatings($l, self::QUAL_METRICS);
+    }
+
+    /**
+     * @param  array<string, mixed>  $block
+     * @param  list<string>  $metricNames
+     */
+    private static function rubricBlockHasAllValidRatings(array $block, array $metricNames): bool
+    {
+        foreach ($metricNames as $name) {
+            $v = self::numericMetricFromRubricBlock($block, $name);
+            if ($v === null || $v < 1 || $v > 5) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * True when every session in the array is a complete quant + qual rubric (same as audit portal).
+     *
+     * @param  list<array<string, mixed>>  $sessions
+     */
+    public static function sessionsPayloadRubricIsComplete(array $sessions): bool
+    {
+        if ($sessions === []) {
+            return false;
+        }
+        foreach (array_values($sessions) as $session) {
+            if (! is_array($session) || ! self::rubricSessionArrayIsComplete($session)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * 70% mean quantitative % + 30% mean qualitative % per session, then mean across sessions. Null if any session is incomplete.
+     *
+     * @param  list<array<string, mixed>>  $sessions
+     */
+    public static function computeWeightedAggregateFromSessionsPayload(array $sessions): ?int
+    {
+        if (! self::sessionsPayloadRubricIsComplete($sessions)) {
+            return null;
+        }
+        $sessionScores = [];
+        foreach (array_values($sessions) as $session) {
+            if (! is_array($session)) {
+                return null;
+            }
+            $q = self::quantitativeBlockFromSession($session);
+            $l = self::qualitativeBlockFromSession($session);
+            $qAvg = self::meanBlockToPercent0to100($q, self::QUANT_METRICS);
+            $lAvg = self::meanBlockToPercent0to100($l, self::QUAL_METRICS);
+            $sessionScores[] = ($qAvg * 0.7) + ($lAvg * 0.3);
+        }
+
+        if ($sessionScores === []) {
+            return null;
+        }
+
+        return (int) round(array_sum($sessionScores) / count($sessionScores));
+    }
+
+    /**
+     * @param  array<string, mixed>  $block
+     * @param  list<string>  $metricNames
+     */
+    private static function meanBlockToPercent0to100(array $block, array $metricNames): float
+    {
+        $sum = 0.0;
+        $c = 0;
+        foreach ($metricNames as $name) {
+            $v = self::numericMetricFromRubricBlock($block, $name);
+            if ($v === null) {
+                return 0.0;
+            }
+            $sum += (float) $v;
+            $c++;
+        }
+        if ($c < 1) {
+            return 0.0;
+        }
+
+        return ($sum / ($c * 5.0)) * 100.0;
+    }
+
     public static function averagedSessionMetrics(iterable $observations): array
     {
         $quantSums = [];
@@ -170,8 +293,11 @@ final class ObservationAnalytics
             if (! $observation instanceof Observation) {
                 continue;
             }
-            foreach ($observation->sessions_payload ?? [] as $session) {
+            foreach (self::sessionsIterable($observation) as $session) {
                 if (! is_array($session)) {
+                    continue;
+                }
+                if (! self::rubricSessionArrayIsComplete($session)) {
                     continue;
                 }
                 $qBlock = self::quantitativeBlockFromSession($session);
@@ -217,6 +343,87 @@ final class ObservationAnalytics
         return ['quantitative' => $quantitative, 'qualitative' => $qualitative];
     }
 
+    /**
+     * Mean of per-metric rubric averages (1–5 scale) converted to a single 0–100 score.
+     * Uses the same definition as the dashboard “rubric” panels for quantitative metrics.
+     */
+    public static function averageQuantPercent(iterable $observations): ?float
+    {
+        $row = self::averagedSessionMetrics($observations)['quantitative'];
+
+        return self::averagePercentFromRubricAverages($row, self::QUANT_METRICS);
+    }
+
+    /**
+     * Mean of per-metric rubric averages (1–5 scale) converted to a single 0–100 score.
+     */
+    public static function averageQualPercent(iterable $observations): ?float
+    {
+        $row = self::averagedSessionMetrics($observations)['qualitative'];
+
+        return self::averagePercentFromRubricAverages($row, self::QUAL_METRICS);
+    }
+
+    /**
+     * Fill width for a horizontal benchmark bar: green ≥85, amber 70–84.9, red &lt;70.
+     */
+    public static function kpiTierBarBgClass(?float $percent): string
+    {
+        if ($percent === null) {
+            return 'bg-slate-300';
+        }
+        if ($percent >= 85.0) {
+            return 'bg-emerald-500';
+        }
+        if ($percent >= 70.0) {
+            return 'bg-amber-500';
+        }
+
+        return 'bg-rose-500';
+    }
+
+    /**
+     * Same math as {@see averageQualPercent} but from a pre-aggregated metric row (e.g. dashboard arrays).
+     *
+     * @param  array<string, float|int>  $metricNameToAvgRating
+     */
+    public static function averageQualPercentFromMetricRow(array $metricNameToAvgRating): ?float
+    {
+        return self::averagePercentFromRubricAverages($metricNameToAvgRating, self::QUAL_METRICS);
+    }
+
+    /**
+     * @param  array<string, float|int>  $metricNameToAvgRating
+     */
+    public static function averageQuantPercentFromMetricRow(array $metricNameToAvgRating): ?float
+    {
+        return self::averagePercentFromRubricAverages($metricNameToAvgRating, self::QUANT_METRICS);
+    }
+
+    /**
+     * @param  array<string, float|int>  $metricNameToAvgRating
+     * @param  list<string>  $metricOrder
+     */
+    private static function averagePercentFromRubricAverages(array $metricNameToAvgRating, array $metricOrder): ?float
+    {
+        $pcts = collect($metricOrder)
+            ->map(function (string $name) use ($metricNameToAvgRating) {
+                $s = $metricNameToAvgRating[$name] ?? null;
+                if (! is_numeric($s)) {
+                    return null;
+                }
+
+                return ((float) $s / 5) * 100;
+            })
+            ->filter(fn ($v) => $v !== null);
+
+        if ($pcts->isEmpty()) {
+            return null;
+        }
+
+        return round((float) $pcts->avg(), 1);
+    }
+
     public static function totalSessionsInObservations(iterable $observations): int
     {
         $total = 0;
@@ -224,11 +431,7 @@ final class ObservationAnalytics
             if (! $observation instanceof Observation) {
                 continue;
             }
-            $sessions = $observation->sessions_payload ?? [];
-            if (! is_array($sessions)) {
-                continue;
-            }
-            $total += count($sessions);
+            $total += count(self::sessionsIterable($observation));
         }
 
         return $total;
@@ -445,7 +648,7 @@ final class ObservationAnalytics
     {
         $sum = 0.0;
         $n = 0;
-        foreach ($observation->sessions_payload ?? [] as $session) {
+        foreach (self::sessionsIterable($observation) as $session) {
             if (! is_array($session)) {
                 continue;
             }
@@ -565,5 +768,54 @@ final class ObservationAnalytics
         }
 
         return $d;
+    }
+
+    /**
+     * Per-session and per-visit text for the observee (faculty / section head) dashboard.
+     *
+     * @return array{session_blocks: list<array{n: int, text: ?string, observed_at: mixed, observer_name: string}>, overall_blocks: list<array{observed_at: mixed, observer_name: string, text: ?string}>}
+     */
+    public static function observeeDashboardRemarks(iterable $observations): array
+    {
+        $col = $observations instanceof Collection
+            ? $observations
+            : collect($observations);
+        $col = $col
+            ->filter(fn ($o) => $o instanceof Observation)
+            ->sortBy('created_at')
+            ->values();
+
+        $sessionBlocks = [];
+        $overallBlocks = [];
+        $sessionNum = 0;
+
+        foreach ($col as $observation) {
+            $observation->loadMissing('observer', 'observationSessions');
+            $observerName = $observation->observer?->name ?? 'Observer';
+            $dt = $observation->created_at;
+
+            $overallBlocks[] = [
+                'observed_at' => $dt,
+                'observer_name' => $observerName,
+                'text' => filled($observation->notes) ? (string) $observation->notes : null,
+            ];
+
+            foreach ($observation->observationSessions->sortBy('sort_order') as $session) {
+                $sessionNum++;
+                $t = $session->session_notes;
+                $text = is_string($t) && trim($t) !== '' ? $t : null;
+                $sessionBlocks[] = [
+                    'n' => $sessionNum,
+                    'text' => $text,
+                    'observed_at' => $dt,
+                    'observer_name' => $observerName,
+                ];
+            }
+        }
+
+        return [
+            'session_blocks' => $sessionBlocks,
+            'overall_blocks' => $overallBlocks,
+        ];
     }
 }

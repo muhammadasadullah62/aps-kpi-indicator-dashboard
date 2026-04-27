@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\Department;
 use App\Enums\UserRole;
 use App\Enums\Wing;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -27,7 +28,6 @@ class User extends Authenticatable
         'password',
         'wing',
         'department',
-        'departments',
         'other_department_label',
     ];
 
@@ -44,8 +44,44 @@ class User extends Authenticatable
             'role' => UserRole::class,
             'wing' => Wing::class,
             'department' => Department::class,
-            'departments' => 'array',
         ];
+    }
+
+    public function assignedDepartments(): HasMany
+    {
+        return $this->hasMany(UserDepartment::class);
+    }
+
+    /**
+     * Multi-department assignments (section heads and faculty) via `user_departments`.
+     *
+     * @return Attribute<list<string>, never>
+     */
+    protected function departments(): Attribute
+    {
+        return Attribute::make(
+            get: function () {
+                if ($this->relationLoaded('assignedDepartments')) {
+                    return $this->assignedDepartments->pluck('department')->values()->all();
+                }
+
+                return $this->assignedDepartments()->pluck('department')->all();
+            },
+        );
+    }
+
+    /**
+     * @param  list<string>  $departmentValues
+     */
+    public function syncDepartments(array $departmentValues): void
+    {
+        $this->assignedDepartments()->delete();
+        foreach ($departmentValues as $value) {
+            if (! is_string($value) || $value === '') {
+                continue;
+            }
+            $this->assignedDepartments()->create(['department' => $value]);
+        }
     }
 
     public function mediaItems(): MorphMany
@@ -137,12 +173,8 @@ class User extends Authenticatable
 
     public function departmentsLabelForDisplay(): string
     {
-        if ($this->isFaculty()) {
-            return $this->department?->label() ?? '—';
-        }
-
-        if ($this->isSectionHead()) {
-            $labels = collect($this->departments ?? [])->map(function ($v) {
+        if ($this->isFaculty() || $this->isSectionHead()) {
+            $labels = collect($this->departments)->map(function ($v) {
                 if (! is_string($v)) {
                     return null;
                 }
@@ -155,7 +187,11 @@ class User extends Authenticatable
                 return Department::tryFrom($v)?->label();
             })->filter()->values();
 
-            return $labels->isEmpty() ? '—' : $labels->implode(', ');
+            if ($labels->isNotEmpty()) {
+                return $labels->implode(', ');
+            }
+
+            return $this->department?->label() ?? '—';
         }
 
         return $this->department?->label() ?? '—';
@@ -210,10 +246,13 @@ class User extends Authenticatable
 
     public static function departmentValuesAssignedToSectionHeads(): Collection
     {
-        return static::query()
-            ->where('role', UserRole::SectionHead)
-            ->pluck('departments')
-            ->flatten()
+        $staffIds = static::query()
+            ->whereIn('role', [UserRole::SectionHead, UserRole::Faculty])
+            ->pluck('id');
+
+        return UserDepartment::query()
+            ->whereIn('user_id', $staffIds)
+            ->pluck('department')
             ->filter(fn ($v) => is_string($v) && $v !== '')
             ->unique()
             ->values();

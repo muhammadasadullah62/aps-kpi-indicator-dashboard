@@ -82,17 +82,32 @@
             <button type="button" onclick="toggleModal('viewSecHeadModal')" class="text-slate-400"><svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
         </div>
         <div class="p-12 space-y-10">
-            <div class="flex items-center gap-10">
-                <div class="relative w-32 h-32 shrink-0">
+            <div class="flex flex-col sm:flex-row sm:items-start gap-10">
+                <div class="relative w-32 h-32 shrink-0 mx-auto sm:mx-0">
                     <img id="viewShAvatar" src="" alt="" class="hidden w-32 h-32 rounded-[2.5rem] object-cover shadow-xl border border-slate-100">
                     <div id="viewShInitials" class="w-32 h-32 bg-aps-green rounded-[2.5rem] flex items-center justify-center text-white text-5xl font-black shadow-xl">?</div>
                 </div>
-                <div class="grid grid-cols-2 gap-x-12 gap-y-6 flex-1">
-                    <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Name</p><p id="viewShName" class="text-lg font-black text-slate-800 leading-none mt-1"></p></div>
-                    <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee ID</p><p id="viewShEmp" class="text-lg font-black text-slate-800 leading-none mt-1"></p></div>
-                    <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</p><p id="viewShEmail" class="text-lg font-black text-aps-green leading-none mt-1"></p></div>
-                    <div><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Wing</p><p id="viewShWing" class="text-lg font-black text-slate-800 leading-none mt-1"></p></div>
-                    <div class="col-span-2"><p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Departments</p><p id="viewShDepartments" class="text-sm font-bold text-slate-700 leading-relaxed mt-2"></p></div>
+                <div class="grid w-full min-w-0 sm:flex-1 grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-5">
+                    <div class="min-w-0 sm:pr-1">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Name</p>
+                        <p id="viewShName" class="text-base sm:text-lg font-black text-slate-800 mt-1 break-words [overflow-wrap:anywhere]"></p>
+                    </div>
+                    <div class="min-w-0 sm:pl-1">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee ID</p>
+                        <p id="viewShEmp" class="text-base sm:text-lg font-black text-slate-800 mt-1 break-words [overflow-wrap:anywhere]"></p>
+                    </div>
+                    <div class="min-w-0 sm:col-span-2">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</p>
+                        <p id="viewShEmail" class="text-sm sm:text-base font-bold text-aps-green mt-1 break-words [overflow-wrap:anywhere] leading-relaxed"></p>
+                    </div>
+                    <div class="min-w-0 sm:col-span-2">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Wing</p>
+                        <p id="viewShWing" class="text-base sm:text-lg font-black text-slate-800 mt-1 break-words [overflow-wrap:anywhere]"></p>
+                    </div>
+                    <div class="min-w-0 sm:col-span-2">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Departments</p>
+                        <p id="viewShDepartments" class="text-sm font-bold text-slate-700 leading-relaxed mt-2 break-words [overflow-wrap:anywhere]"></p>
+                    </div>
                 </div>
             </div>
             <div class="mt-8 pt-8 border-t border-slate-100 flex justify-end">

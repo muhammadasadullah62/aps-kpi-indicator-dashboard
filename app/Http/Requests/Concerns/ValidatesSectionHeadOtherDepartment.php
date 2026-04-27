@@ -69,7 +69,7 @@ trait ValidatesSectionHeadOtherDepartment
             }
 
             $query = User::query()
-                ->where('role', UserRole::SectionHead)
+                ->whereIn('role', [UserRole::SectionHead, UserRole::Faculty])
                 ->whereNotNull('other_department_label');
 
             if ($ignoreUserId !== null) {

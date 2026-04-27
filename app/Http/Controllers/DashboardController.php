@@ -67,9 +67,14 @@ class DashboardController extends Controller
         $rankFacultyWing = $user->wing
             ? ObservationAnalytics::rankedFacultyInWing($user->wing)
             : collect();
-        $allObservations = Observation::query()->orderBy('created_at')->get();
-        $observerMetrics = ObservationAnalytics::averagedSessionMetrics($allObservations);
-        $rubricAggregatedSessions = ObservationAnalytics::totalSessionsInObservations($allObservations);
+        $received = $user->observationsReceived()
+            ->with(['observationSessions.scores', 'observer'])
+            ->orderByDesc('created_at')
+            ->get();
+        $observerMetrics = ObservationAnalytics::averagedSessionMetrics($received);
+        $rubricAggregatedSessions = ObservationAnalytics::totalSessionsInObservations($received);
+        $kpiQuantAveragePercent = ObservationAnalytics::averageQuantPercent($received);
+        $kpiQualAveragePercent = ObservationAnalytics::averageQualPercent($received);
 
         return [
             'overviewVariant' => 'section_head',
@@ -81,15 +86,21 @@ class DashboardController extends Controller
             'topWingTeacher' => $rankFacultyWing->first(),
             'observerMetrics' => $observerMetrics,
             'rubricAggregatedSessions' => $rubricAggregatedSessions,
-            'kpiQuantCards' => ObservationAnalytics::kpiQuantitativeCardsFromObservations($allObservations),
-            'kpiQualCards' => ObservationAnalytics::kpiQualitativeCardsFromObservations($allObservations),
-            'kpiObservationCount' => $allObservations->count(),
+            'kpiQuantAveragePercent' => $kpiQuantAveragePercent,
+            'kpiQualAveragePercent' => $kpiQualAveragePercent,
+            'kpiQuantCards' => ObservationAnalytics::kpiQuantitativeCardsFromObservations($received),
+            'kpiQualCards' => ObservationAnalytics::kpiQualitativeCardsFromObservations($received),
+            'kpiObservationCount' => $received->count(),
+            'observationRemarks' => ObservationAnalytics::observeeDashboardRemarks($received),
         ];
     }
 
     private function facultyOverviewData(User $user): array
     {
-        $received = $user->observationsReceived()->orderByDesc('created_at')->get();
+        $received = $user->observationsReceived()
+            ->with(['observationSessions.scores', 'observer'])
+            ->orderByDesc('created_at')
+            ->get();
         $summaries = ObservationAnalytics::summariesByObservee();
         $summaryRow = $summaries->get($user->id);
 
@@ -119,6 +130,8 @@ class DashboardController extends Controller
         $observeeMetrics = ObservationAnalytics::averagedSessionMetrics($received);
         $rubricAggregatedSessions = ObservationAnalytics::totalSessionsInObservations($received);
         $observationOverallAveragePercent = ObservationAnalytics::averageAggregatePercent($received);
+        $kpiQuantAveragePercent = ObservationAnalytics::averageQuantPercent($received);
+        $kpiQualAveragePercent = ObservationAnalytics::averageQualPercent($received);
 
         return [
             'overviewVariant' => 'faculty',
@@ -126,6 +139,8 @@ class DashboardController extends Controller
             'observeeMetrics' => $observeeMetrics,
             'rubricAggregatedSessions' => $rubricAggregatedSessions,
             'observationOverallAveragePercent' => $observationOverallAveragePercent,
+            'kpiQuantAveragePercent' => $kpiQuantAveragePercent,
+            'kpiQualAveragePercent' => $kpiQualAveragePercent,
             'rankStaff' => $rankStaff,
             'rankSectionHeads' => $rankSectionHeads,
             'topSectionHead' => $rankSectionHeads->first(),
@@ -137,6 +152,7 @@ class DashboardController extends Controller
             'topStaff' => $rankStaff->first(),
             'topWingTeacher' => $topWingTeacher,
             'observationCount' => $received->count(),
+            'observationRemarks' => ObservationAnalytics::observeeDashboardRemarks($received),
         ];
     }
 
@@ -152,25 +168,14 @@ class DashboardController extends Controller
         $observations = $this->observationsForMetricPages($user);
         $metrics = ObservationAnalytics::averagedSessionMetrics($observations);
         $quant = $metrics['quantitative'];
-
-        $quantScores = collect(ObservationAnalytics::QUANT_METRICS)
-            ->map(fn (string $name) => $quant[$name] ?? null)
-            ->filter(fn ($v) => is_numeric($v));
-
-        $avgPerfPercent = null;
-        $overallQuantKpi = null;
-        if ($quantScores->isNotEmpty()) {
-            $avgPerfPercent = round(
-                $quantScores->map(fn ($s) => ((float) $s / 5) * 100)->avg(),
-                1
-            );
-            $overallQuantKpi = round($quantScores->avg(), 1);
-        }
+        $quantAveragePercent = ObservationAnalytics::averageQuantPercent($observations);
+        $quantBarClass = ObservationAnalytics::kpiTierBarBgClass($quantAveragePercent);
 
         return view('dashboard.quantitative-observations', [
             'quantitative' => $quant,
-            'avgPerfPercent' => $avgPerfPercent,
-            'overallQuantKpi' => $overallQuantKpi,
+            'avgPerfPercent' => $quantAveragePercent,
+            'quantAveragePercent' => $quantAveragePercent,
+            'quantBarClass' => $quantBarClass,
         ]);
     }
 
@@ -191,32 +196,23 @@ class DashboardController extends Controller
         $observations = $this->observationsForMetricPages($user);
         $metrics = ObservationAnalytics::averagedSessionMetrics($observations);
         $qual = $metrics['qualitative'];
-
-        $qualScores = collect(ObservationAnalytics::QUAL_METRICS)
-            ->map(fn (string $name) => $qual[$name] ?? null)
-            ->filter(fn ($v) => is_numeric($v));
-
-        $aggregateQualitativePercent = null;
-        if ($qualScores->isNotEmpty()) {
-            $aggregateQualitativePercent = (int) round(
-                $qualScores->map(fn ($s) => ((float) $s / 5) * 100)->avg(),
-                0
-            );
-        }
+        $qualAveragePercent = ObservationAnalytics::averageQualPercent($observations);
+        $qualBarClass = ObservationAnalytics::kpiTierBarBgClass($qualAveragePercent);
 
         return view('dashboard.qualitative-observation', [
             'qualitative' => $qual,
-            'aggregateQualitativePercent' => $aggregateQualitativePercent,
+            'qualAveragePercent' => $qualAveragePercent,
+            'qualBarClass' => $qualBarClass,
+            'aggregateQualitativePercent' => $qualAveragePercent !== null ? (int) round($qualAveragePercent) : null,
         ]);
     }
 
     private function observationsForMetricPages(User $user): Collection
     {
-        if ($user->isFaculty()) {
-            return $user->observationsReceived()->orderByDesc('created_at')->get();
-        }
-
-        return Observation::query()->orderByDesc('created_at')->get();
+        return $user->observationsReceived()
+            ->with('observationSessions.scores')
+            ->orderByDesc('created_at')
+            ->get();
     }
 
     public function adminPanel()
@@ -254,7 +250,7 @@ class DashboardController extends Controller
                 $wing->value => User::query()
                     ->where('role', UserRole::Faculty)
                     ->where('wing', $wing)
-                    ->with('avatarMedia')
+                    ->with(['avatarMedia', 'assignedDepartments'])
                     ->orderBy('name')
                     ->get(),
             ];
@@ -265,7 +261,7 @@ class DashboardController extends Controller
             $facultyUnassigned = User::query()
                 ->where('role', UserRole::Faculty)
                 ->whereNull('wing')
-                ->with('avatarMedia')
+                ->with(['avatarMedia', 'assignedDepartments'])
                 ->orderBy('name')
                 ->get();
         }
@@ -341,13 +337,13 @@ class DashboardController extends Controller
         if ($user->isAdmin() || $user->isPrincipal()) {
             $observees = User::query()
                 ->where('role', UserRole::SectionHead)
-                ->with('avatarMedia')
+                ->with(['avatarMedia', 'assignedDepartments'])
                 ->orderBy('name')
                 ->get()
                 ->concat(
                     User::query()
                         ->where('role', UserRole::Faculty)
-                        ->with('avatarMedia')
+                        ->with(['avatarMedia', 'assignedDepartments'])
                         ->orderBy('name')
                         ->get()
                 );
@@ -355,12 +351,12 @@ class DashboardController extends Controller
             $observees = User::query()
                 ->where('role', UserRole::Faculty)
                 ->where('wing', $user->wing)
-                ->with('avatarMedia')
+                ->with(['avatarMedia', 'assignedDepartments'])
                 ->orderBy('name')
                 ->get();
         }
 
-        $observationQuery = Observation::query()->with(['observer:id,name']);
+        $observationQuery = Observation::query()->with(['observer:id,name', 'observationSessions.scores']);
 
         if ($user->isSectionHead()) {
             $observationQuery->where('observer_id', $user->id);
@@ -391,28 +387,46 @@ class DashboardController extends Controller
 
     public function storeObservation(StoreObservationRequest $request): RedirectResponse
     {
-        Observation::query()->create([
+        $sessions = $request->validated('sessions_payload');
+        $aggregate = ObservationAnalytics::computeWeightedAggregateFromSessionsPayload($sessions);
+        if ($aggregate === null) {
+            return redirect()->back()->withInput()->withErrors([
+                'sessions_payload' => 'A valid total score could not be calculated. Every session needs all quantitative and qualitative items rated 1–5.',
+            ]);
+        }
+
+        $observation = Observation::query()->create([
             'observer_id' => $request->user()->id,
             'observee_id' => $request->validated('observee_id'),
-            'aggregate_percent' => $request->validated('aggregate_percent'),
-            'sessions_payload' => $request->validated('sessions_payload'),
+            'aggregate_percent' => $aggregate,
             'notes' => $request->validated('notes'),
             'observation_wing' => $request->validated('observation_wing'),
             'observation_department' => $request->validated('observation_department'),
         ]);
+
+        $observation->syncSessionsFromPayload($sessions);
 
         return redirect()->route('observations')->with('status', 'Observation recorded successfully.');
     }
 
     public function updateObservation(UpdateObservationRequest $request, Observation $observation): RedirectResponse
     {
+        $sessions = $request->validated('sessions_payload');
+        $aggregate = ObservationAnalytics::computeWeightedAggregateFromSessionsPayload($sessions);
+        if ($aggregate === null) {
+            return redirect()->back()->withInput()->withErrors([
+                'sessions_payload' => 'A valid total score could not be calculated. Every session needs all quantitative and qualitative items rated 1–5.',
+            ]);
+        }
+
         $observation->update([
-            'aggregate_percent' => $request->validated('aggregate_percent'),
-            'sessions_payload' => $request->validated('sessions_payload'),
+            'aggregate_percent' => $aggregate,
             'notes' => $request->validated('notes'),
             'observation_wing' => $request->validated('observation_wing'),
             'observation_department' => $request->validated('observation_department'),
         ]);
+
+        $observation->syncSessionsFromPayload($sessions);
 
         return redirect()->route('observations')->with('status', 'Observation updated successfully.');
     }
